@@ -1,0 +1,57 @@
+// Desired sampling year and analyte/associated MCL
+var samplingYear = "collect_date >= timestamp '2022-01-01' AND collect_date <= timestamp '2022-12-31'"
+var analyteAbbr = "PFHxS"
+var mcl = 51
+
+// Year a specific sample is assigned to
+var sampleYear = ''
+
+// Access related sampling results table
+var relatedTable = FeatureSetByPortalItem(Portal('[portal url]'), '[portal item GUID]', [layer ID], ['user_address1','sampled_address_clean','analyte_abbrev','result_num','analyte_NDE','collect_date'], false)
+
+// Define a common attribute, then create a filter statement based on that attribute
+// Want to get features where user_address1 from address points layer matches sampled_address_clean in sampling results table
+var commonAttr = $feature["user_address1"]
+var filterStatement = 'sampled_address_clean = @commonAttr'
+
+// Filter the data to only matching address records
+var relatedSamples = Filter(relatedTable, filterStatement)
+
+// Filter the data to only matching analyte abbreviation
+var relatedSamplesAnalyte = Filter(relatedSamples, 'analyte_abbrev = @analyteAbbr')
+
+// Filter the data to only matching year
+var relatedSamplesAnalyteYear = Filter(relatedSamplesAnalyte, samplingYear)
+
+// Find highest result for sampling year
+var highestResultForYear = Max(relatedSamplesAnalyteYear, 'result_num')
+
+// Find highest result ever for address
+var highestResultForAddr = Max(relatedSamplesAnalyte, 'result_num')
+
+// Compare the highest result for the year to the MCL
+var nde = ''
+
+if(highestResultForYear > mcl){
+    nde = " (E)"
+} else if (highestResultForYear > 0 && highestResultForYear <= mcl){
+    nde = " (D)"
+} else if (highestResultForYear == 0){
+    nde = "ND"
+}
+
+// How many records meet the criteria so far?
+var numRecords = Count(relatedSamplesAnalyteYear)
+
+var multipleRecords = ''
+if(numRecords > 1){
+    multipleRecords = "⁺"
+}
+
+if(highestResultForYear == highestResultForAddr && highestResultForYear != 0 && (IsEmpty(highestResultForYear) == false)){
+    DefaultValue(highestResultForYear + multipleRecords + nde + " ⯇",null)
+} else if (highestResultForYear == 0){
+    DefaultValue(nde + multipleRecords, null)
+} else {
+    DefaultValue(highestResultForYear + multipleRecords + nde, "*")
+}
